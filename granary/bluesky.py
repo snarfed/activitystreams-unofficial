@@ -43,10 +43,11 @@ logger = logging.getLogger(__name__)
 # via https://atproto.com/specs/handle
 HANDLE_REGEX = (
   r'([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+'
-  r'[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$'
+  r'[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?'
 )
-HANDLE_PATTERN = re.compile(r'^' + HANDLE_REGEX)
-DID_WEB_PATTERN = re.compile(r'^did:web:' + HANDLE_REGEX)
+HANDLE_PATTERN = re.compile(r'^' + HANDLE_REGEX + r'$')
+DID_WEB_PATTERN = re.compile(r'^did:web:' + HANDLE_REGEX + r'$')
+AT_MENTION_PATTERN = re.compile(r'(?:^|\s)@' + HANDLE_REGEX + r'(?:$|\s)')
 
 MAX_MEDIA_SIZE_BYTES = 5_000_000
 
@@ -764,6 +765,18 @@ def from_as1(obj, out_type=None, blobs=None, aspects=None, client=None,
           content = content[:start] + link['text'] + content[end:]
 
     tags = util.get_list(obj, 'tags')
+
+    # extract un-linked @-mentions
+    if client:
+      for handle in AT_MENTION_PATTERN.finditer(content):
+        handle = handle.group(0).strip()
+        did = client.com.atproto.identity.resolveHandle(handle=handle[1:])['did']
+        if did:
+          tags.append({
+            'objectType': 'mention',
+            'url': did,
+            'displayName': handle,
+          })
 
     # handle summary. for articles, use instead of content. for notes, assume
     # it's a fediverse-style content warnings, add above content.
